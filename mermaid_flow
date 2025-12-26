@@ -1,0 +1,53 @@
+flowchart TD
+  %% TravelGraph = Orchestrator (finite-state, step-based pipeline)
+  TG([TravelGraph Orchestrator<br/>(FSM workflow + per-session state)])
+
+  %% Shared state
+  S[(Session State<br/>user_info, geo, weather,<br/>ranked_pois, selections,<br/>daily_plan, itinerary, budget, output)]
+
+  %% Agents
+  CA[[ChatAgent<br/>Collect prefs / slot-fill<br/>Outputs: user_info updates,<br/>missing_fields, (stream)]]
+  IA[[InformationAgent<br/>Geocode + Weather + POIs<br/>LLM rerank with prefs+weather]]
+  RA[[RecommendAgent<br/>Select core attractions<br/>Generate map_data]]
+  SA[[StrategyAgent<br/>Daily plan (by name)<br/>additional_attractions<br/>Trip-level advice (car rental)]]
+  RUA[[RouteAgent<br/>Plan execution: objects<br/>Budget estimate (+car/fuel optional)]]
+  CMA[[CommunicationAgent<br/>Final narrative / confirmation style<br/>(car-rental messaging mostly disabled)]]
+
+  %% Start
+  Start([Start / New Session]) --> TG
+  TG --> S
+  TG --> CA
+
+  %% Chat loop for missing fields
+  CA -->|partial state updates| S
+  CA --> MF{missing_fields?}
+  MF -- Yes -->|ask user / collect more| CA
+  MF -- No --> IA
+
+  %% Info enrichment + ranking
+  IA -->|geo, weather, ranked_pois| S
+  IA --> RA
+
+  %% UI-facing selection + map payload
+  RA -->|core_attractions, map_data| S
+  RA --> SA
+
+  %% Global strategy / policy
+  SA -->|daily_plan (names), additional_attractions, trip advice| S
+  SA --> RUA
+
+  %% Execution planning + budget
+  RUA -->|itinerary objects, budget| S
+  RUA --> CMA
+
+  %% Final narrative output
+  CMA -->|final message| S
+  CMA --> End([Return Response])
+
+  %% Orchestrator mediates each step via state
+  TG -.controls/steps.-> CA
+  TG -.controls/steps.-> IA
+  TG -.controls/steps.-> RA
+  TG -.controls/steps.-> SA
+  TG -.controls/steps.-> RUA
+  TG -.controls/steps.-> CMA
